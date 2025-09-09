@@ -25,12 +25,8 @@ int parse_http_request(const char *raw_request, HttpRequest *request) {
   line[i] = '\0';
 
   sscanf(line, "%7s %255s", request->method, request->path);
-  printf("method -> %s\tpath -> %s\n", request->method, request->path);
 
   skip_empty_lines(rr_ptr);
-  // while (*rr_ptr == '\r' || *rr_ptr == '\n') {
-  //   rr_ptr++;
-  // }
 
   // headers
   request->headers_count = 0;
@@ -65,13 +61,9 @@ int parse_http_request(const char *raw_request, HttpRequest *request) {
     request->headers_count++;
 
     skip_empty_lines(rr_ptr);
-    // while (*rr_ptr == '\r' || *rr_ptr == '\n')
-    //   rr_ptr++;
   }
 
   skip_empty_lines(rr_ptr);
-  // while (*rr_ptr == '\r' || *rr_ptr == '\n')
-  //   rr_ptr++;
 
   if (*rr_ptr != '\0') {
     // body
@@ -91,4 +83,52 @@ void free_http_request(HttpRequest *req) {
     free(req->body);
     req->body = NULL;
   }
+}
+
+// Responses
+
+int build_http_response(const HttpResponse *res, char *buf, size_t buf_size) {
+  // Первая строка ответа - протокол, статускод и статус-текст
+  // written - счётчик записанных байт
+  int written = snprintf(buf, buf_size, "HTTP/1.1 %d %s\r\n", res->status_code,
+                         res->status_text);
+
+  // запись заголовков ответа
+  for (size_t i = 0; i < res->headers_count; i++) {
+    written += snprintf(buf + written, buf_size - written, "%s: %s\r\n",
+                        res->headers[i][0], res->headers[i][1]);
+  }
+
+  // разделитель между заголовками и телом
+  written += snprintf(buf + written, buf_size - written, "\r\n");
+
+  if (res->body && res->body_len > 0) {
+    // check how much bytes we can SAFELY copy
+    size_t to_copy = (buf_size - written - 1) < res->body_len
+                         ? (buf_size - written - 1)
+                         : res->body_len;
+
+    // copy `to_copy` bytes from res->body to buf+written
+    memcpy(buf + written, res->body, to_copy);
+    written += to_copy;
+  }
+
+  buf[written] = '\0';
+  // written += snprintf(buf + written, buf_size - written, "\r\n");
+  return written;
+}
+
+void add_header(HttpResponse *res, const char *name, const char *value) {
+    if (res->headers_count < MAX_HEADERS) {
+        strncpy(res->headers[res->headers_count][0], name, MAX_HEADER_NAME_LEN);
+        strncpy(res->headers[res->headers_count][1], value, MAX_HEADER_VALUE_LEN);
+        res->headers_count++;
+    }
+}
+
+void free_http_response(HttpResponse *response) {
+    if (response->body) {
+        free(response->body);
+        response->body = NULL;
+    }
 }
