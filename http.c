@@ -132,3 +132,42 @@ void free_http_response(HttpResponse *response) {
         response->body = NULL;
     }
 }
+
+void create_ok_response(HttpResponse* response) {
+    memset(response, 0, sizeof(HttpResponse));
+    response->status_code = 200;
+    response->status_text = "OK";
+
+    add_header(response, "Content-Type", "text/plain");
+    add_header(response, "Connection", "close");
+
+    const char *response_str = "Recieved\n";
+    response->body = strdup(response_str);
+    if (response->body) {
+      response->body_len = strlen(response->body);
+    }
+
+    char content_length_header[20];
+    snprintf(content_length_header, sizeof(content_length_header), "%zu",
+             response->body_len);
+    add_header(response, "Content-Length", content_length_header);
+}
+
+void create_err_response(HttpResponse *response, int status, char* status_str, const char* body) {
+    memset(response, 0, sizeof(HttpResponse)); 
+    response->status_code = status;  
+    response->status_text = status_str;
+
+    add_header(response, "Content-Type", "text/plain");
+    add_header(response, "Connection", "close");
+
+    response->body = strdup(body);
+    if (response->body) {
+        response->body_len = strlen(response->body);
+    }
+
+    char content_length_header[20];
+    snprintf(content_length_header, sizeof(content_length_header), "%zu",
+             response->body_len);
+    add_header(response, "Content-Length", content_length_header);
+}

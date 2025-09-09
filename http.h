@@ -37,4 +37,7 @@ int build_http_response(const HttpResponse* response, char* buf, size_t buf_size
 void add_header(HttpResponse* response, const char* name, const char* value);
 void free_http_response(HttpResponse* response);
 
+void create_ok_response(HttpResponse* response);
+void create_err_response(HttpResponse *response, int status, char* status_str, const char* body);
+
 #endif
