@@ -1,5 +1,5 @@
 build:
-	gcc main.c -o bin/main
+	gcc main.c http.c -o bin/main
 
 run: build
 	./bin/main

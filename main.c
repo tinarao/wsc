@@ -1,3 +1,5 @@
+#include "http.h"
+
 #include <errno.h>
 #include <netinet/in.h>
 #include <stdio.h>
@@ -7,9 +9,9 @@
 #include <sys/types.h>
 #include <unistd.h>
 
-#define MAX_MSG_SIZE 256
+#define MAX_MSG_SIZE 4096 
 
-// Достаточно внятный гайд по поднятию tcp-сервера 
+// Достаточно внятный гайд по поднятию tcp-сервера
 // https://devtails.xyz/@adam/how-to-build-a-simple-tcp-server-in-c
 
 int main(void) {
@@ -33,13 +35,12 @@ int main(void) {
     exit(EXIT_FAILURE);
   }
 
-  listen(socket_file_descriptor, 1);
+  listen(socket_file_descriptor, 5);
 
-  printf("waiting...\n");
+  printf("listening at %d\n", PORT);
 
   struct sockaddr_in client_sockaddr_in;
 
-  // new
   while (1) {
     socklen_t len = sizeof(client_sockaddr_in);
 
@@ -56,10 +57,16 @@ int main(void) {
 
     if (bytes_read > 0) {
       buf[bytes_read] = '\0';
-      printf("recieved %s\n", buf);
+
+      HttpRequest req;
+      if (parse_http_request(buf, &req) == -1) {
+        perror("failed to parse http data\n");
+        continue;
+      }
+
+      free_http_request(&req);
 
       char status = 0;
-
       write(conn_file_descriptor, &status, 1);
     } else if (bytes_read == 0) {
       printf("client disconnected\n");
