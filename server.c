@@ -1,6 +1,5 @@
 #include "server.h"
 #include "http.h"
-#include "websockets.h"
 #include <stdio.h>
 
 int start_http_server(int port) {

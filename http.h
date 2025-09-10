@@ -44,4 +44,10 @@ void free_http_response(HttpResponse* response);
 void create_ok_response(HttpResponse* response);
 void create_err_response(HttpResponse *response, int status, char* status_str, const char* body);
 
+// Websocket-related
+// 1 is yes, else 0
+int is_websocket_handshake(HttpRequest *req);
+int build_ws_handshake_response(HttpResponse *res, const char* sec_ws_key);
+int make_ws_accept_hash(HttpResponse *res, const char *sec_ws_key);
+
 #endif

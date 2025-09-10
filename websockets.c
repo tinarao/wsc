@@ -1,87 +1,107 @@
 #include "websockets.h"
-#include "http.h"
-#include <openssl/bio.h>
-#include <openssl/buffer.h>
-#include <openssl/evp.h>
-#include <openssl/sha.h>
 #include <stdio.h>
 #include <stdlib.h>
-#include <string.h>
-#include <strings.h>
+#include <unistd.h>
 
-int is_websocket_handshake(HttpRequest *req) {
-  const char *upgrade = find_header(req, "upgrade");
-  const char *connection = find_header(req, "connection");
-  const char *ws_version = find_header(req, "sec-websocket-version");
-  const char *ws_key = find_header(req, "sec-websocket-key");
+// opcode frames:
+// 0x1 - текстовые сообщения  1
+// 0x2 - бинарные данные      10
+// 0x8 - закрытие соединения  1000
+// 0x9 - ping                 1001
+// 0xA - pong                 1010
 
-  return (upgrade && strcasecmp(upgrade, "websocket") == 0 && connection &&
-          strcasestr(connection, "upgrade") != NULL && ws_key && ws_version &&
-          strcasecmp(ws_version, "13"));
+int read_ws_frame(int conn_fd, WSFrame *frame) {
+  // заголовок - первые два байта фрейма
+  // первый байт содержит флаги и тип (opcode)
+  // второй байт - mask и начальную информацию о длине
+  uint8_t header[2];
+  ssize_t bytes_read = read(conn_fd, header, 2);
+  if (bytes_read != 2) {
+    return -1;
+  };
+
+  // bit masking
+  frame->fin = header[0] & 0x80;           // 10000000 
+  frame->opcode = header[0] & 0x0F;        // 00001111 
+  frame->mask = header[1] & 0x80;          // 10000000 
+  frame->payload_len = header[1] & 0x7F;   // 01111111 
+
+  size_t offset = 2; // read bytes counter
+
+  // payload_len - изначальная информация о длине сообщения
+  // если <= 125 - то это и есть реальная длина
+  // 126 - реальная длина в следующих 2 байтах
+  // 127 - реальная длина в следующих 8 байтах
+  if (frame->payload_len == 126) {
+    uint8_t len_buf[2];
+    if (read(conn_fd, len_buf, 2) != 2) {
+      printf("invalid payload_len\n");
+      return -1;
+    };
+
+    frame->payload_len = (len_buf[0] << 8) | len_buf[1];
+    offset += 2;
+  } else if (frame->payload_len == 127) {
+    uint8_t len_buf[8];
+    if (read(conn_fd, len_buf, 8) != 8) {
+      printf("invalid payload_len\n");
+      return -1;
+    }
+
+    frame->payload_len = 0;
+    for (int i = 0; i < 8; i++) {
+      frame->payload_len = (frame->payload_len << 8) | len_buf[i];
+    }
+
+    offset += 8;
+  }
+
+  if (frame->mask) {
+    if (read(conn_fd, frame->masking_key, 4) != 4) {
+      return -1;
+    }
+
+    offset += 4;
+  }
+
+  frame->payload = malloc(frame->payload_len);
+  if (read(conn_fd, frame->payload, frame->payload_len) != frame->payload_len) {
+    free(frame->payload);
+    return -1;
+  }
+
+  if (frame->mask) {
+    for (size_t i = 0; i < frame->payload_len; i++) {
+      frame->payload[i] ^= frame->masking_key[i % 4];
+    }
+  }
+
+  return offset + frame->payload_len;
 }
 
-int make_ws_accept_hash(HttpResponse *res, const char *sec_ws_key) {
-  if (sec_ws_key == NULL)
-    return -1;
+int send_ws_frame(int conn_fd, const uint8_t *payload, size_t payload_len,
+                  uint8_t opcode) {
+  uint8_t header[14]; // max header size
+  size_t header_len = 0;
 
-  char *magic_str = "258EAFA5-E914-47DA-95CA-C5AB0DC85B11";
-  size_t key_len = strlen(sec_ws_key);
-  size_t magic_len = strlen(magic_str);
+  header[header_len++] = 0x80 | opcode;
 
-  char *hash_base = malloc(key_len + magic_len + 1);
-  if (hash_base == NULL) {
-    perror("Failed to allocate mem for hash_base");
-    return -1;
+  if (payload_len <= 125) {
+    header[header_len++] = payload_len;
+  } else if (payload_len <= 65535) {
+    header[header_len++] = 126;
+    header[header_len++] = (payload_len >> 8) & 0xFF;
+    header[header_len++] = payload_len & 0xFF;
+  } else {
+    header[header_len++] = 127;
+    for (int i = 7; i >= 0; i--) {
+      header[header_len++] = (payload_len >> (8 * i)) & 0xFF;
+    }
   }
 
-  strcpy(hash_base, sec_ws_key);
-  strcat(hash_base, magic_str);
+  // write header
+  if (write(conn_fd, header, header_len) != header_len) return -1;
+  if (write(conn_fd, payload, payload_len) != payload_len) return -1;
 
-  // sha1
-  unsigned char hash[SHA_DIGEST_LENGTH];
-  SHA1((unsigned char *)hash_base, strlen(hash_base), hash);
-
-  // base64
-  BIO *b64, *bio;
-  BUF_MEM *bptr = NULL;
-  char *buf = NULL;
-
-  b64 = BIO_new(BIO_f_base64());
-  bio = BIO_new(BIO_s_mem());
-  bio = BIO_push(b64, bio);
-  BIO_set_flags(bio, BIO_FLAGS_BASE64_NO_NL);
-
-  BIO_write(bio, hash, SHA_DIGEST_LENGTH);
-  BIO_flush(bio);
-  BIO_get_mem_ptr(bio, &bptr);
-
-  buf = (char *)malloc(bptr->length + 1);
-  if (buf != NULL) {
-    memcpy(buf, bptr->data, bptr->length);
-    buf[bptr->length] = '\0';
-  }
-
-  BIO_free_all(bio);
-  free(hash_base);
-
-  res->ws_accept_hash = buf;
-  return 0;
-}
-
-int build_ws_handshake_response(HttpResponse *res, const char *sec_ws_key) {
-  memset(res, 0, sizeof(HttpResponse));
-  res->status_code = 101;
-  res->status_text = "Switching Protocols";
-
-  // set res->accept_hash
-  if (make_ws_accept_hash(res, sec_ws_key) == -1) {
-    perror("Failed to calculate accept hash");
-    return -1;
-  }
-
-  add_header(res, "connection", "upgrade");
-  add_header(res, "upgrade", "websocket");
-  add_header(res, "sec-websocket-accept", res->ws_accept_hash);
-
-  return 0;
+  return header_len + payload_len;
 }

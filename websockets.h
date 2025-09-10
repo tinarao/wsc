@@ -1,27 +1,23 @@
 #ifndef WEBSOCKETS_H
 #define WEBSOCKETS_H
 
-// 1. В handle_request(int conn_fd) проверяем,
-//         является ли запрос Websockets: Update.
-//         Критерии:
-//         1. GET
-//         2. Заголовок Upgrade: websocket
-//         3. Заголовок Connection: upgrade
-//         4. Заголовок Sec-WebSocket-Version: 13
-//         5. Заголовок Sec-WebSocket-Key должен присутствовать
-// 2. Если да:
-//         1. Отдаём 101
-//         2. Вычисляем Sec-WebSocket-Accept: берем Sec-WebSocket-Key, добавляем GUID "258EAFA5-E914-47DA-95CA-C5AB0DC85B11"
-//         3. Вычисляем SHA-1 хэш, затем base64 кодируем.
-//         4. Отправляем ответ и переводим в режим websocket.
-//         5. После успешного handshake, нужно читать и писать WebSocket-фреймы. 
-//         6. Реализуем парсинг и создание ws-фреймов.
-#include "http.h"
+#include <stddef.h>
+#include <stdint.h>
 
-// 1 is yes, else 0
-int is_websocket_handshake(HttpRequest *req);
+typedef struct {
+    uint8_t fin;           // 1 bit, указывает, является ли фрейм последним в сообщении
+    uint8_t opcode;        // 4 bit, определяет тип фрейма
+    uint8_t mask;          // 1 bit, указывает, замаскированы ли данные (клиент - 1, сервер - 0)
+    uint8_t masking_key[4];  // 32 bit, используется для маскировки данных
+                           // должен присутствовать если Mask=1
+    uint64_t payload_len;  
+    uint8_t *payload;
+} WSFrame;
 
-int build_ws_handshake_response(HttpResponse *res, const char* sec_ws_key);
+// returns amount of written bytes
+int read_ws_frame(int conn_fd, WSFrame *frame);
 
-int make_ws_accept_hash(HttpResponse *res, const char *sec_ws_key);
+// returns amount of written bytes
+int send_ws_frame(int conn_fd, const uint8_t *payload, size_t payload_len, uint8_t opcode);
+
 #endif
