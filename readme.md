@@ -11,7 +11,7 @@
 # План
 
 - [x] Базовый TCP-сервер
-- [ ] HTTP + handshakes
+- [x] HTTP + handshakes
 - [ ] Парсинг websocket-фреймов
 - [ ] Отвечаем websocket-фреймами
 

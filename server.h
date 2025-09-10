@@ -16,5 +16,6 @@
 
 int start_http_server(int port);
 int handle_request(int conn_fd);
+int send_response(int conn_fd, HttpResponse *res);
 
 #endif

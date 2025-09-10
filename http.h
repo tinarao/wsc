@@ -34,6 +34,7 @@ typedef struct {
     size_t body_len;
     char* status_text;
     char* body;
+    char* ws_accept_hash; // used in sec-websocket-access
 } HttpResponse;
 
 int build_http_response(const HttpResponse* response, char* buf, size_t buf_size);

@@ -20,4 +20,8 @@
 
 // 1 is yes, else 0
 int is_websocket_handshake(HttpRequest *req);
+
+int build_ws_handshake_response(HttpResponse *res, const char* sec_ws_key);
+
+int make_ws_accept_hash(HttpResponse *res, const char *sec_ws_key);
 #endif

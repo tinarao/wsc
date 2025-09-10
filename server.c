@@ -1,12 +1,12 @@
 #include "server.h"
 #include "http.h"
 #include "websockets.h"
+#include <stdio.h>
 
 int start_http_server(int port) {
   struct sockaddr_in server_sockaddr_in;
   server_sockaddr_in.sin_family = AF_INET; // internet work
   server_sockaddr_in.sin_addr.s_addr = htonl(INADDR_ANY);
-
   server_sockaddr_in.sin_port = htons(port);
 
   // creates an endpoint for communication and returns a file descriptor that
@@ -18,7 +18,7 @@ int start_http_server(int port) {
       bind(socket_file_descriptor, (struct sockaddr *)&server_sockaddr_in,
            sizeof(server_sockaddr_in));
   if (bindres == -1) {
-    fprintf(stderr, "bind failed: %s\n", strerror(errno));
+    perror("bind failed");
     exit(EXIT_FAILURE);
   }
 
@@ -35,7 +35,7 @@ int start_http_server(int port) {
         socket_file_descriptor, (struct sockaddr *)&client_sockaddr_in, &len);
 
     if (conn_file_descriptor == -1) {
-      perror("accept failed\n");
+      perror("accept failed");
       continue;
     }
 
@@ -43,6 +43,20 @@ int start_http_server(int port) {
   }
 
   close(socket_file_descriptor);
+  return 0;
+}
+
+int send_response(int conn_fd, HttpResponse *res) {
+  char response_buf[4096];
+  int response_size =
+      build_http_response(res, response_buf, sizeof(response_buf));
+
+  int bytes_written = write(conn_fd, response_buf, response_size);
+  if (bytes_written == -1) {
+    perror("write failed");
+    return -1;
+  }
+
   return 0;
 }
 
@@ -60,44 +74,38 @@ int handle_request(int conn_fd) {
       create_err_response(&res, 500, "Internal Server Error",
                           "Failed to read request");
 
-      char response_buf[4096];
-      int response_size =
-          build_http_response(&res, response_buf, sizeof(response_buf));
-
-      int bytes_written = write(conn_fd, response_buf, response_size);
-      if (bytes_written == -1) {
-        perror("write failed");
-      }
+      send_response(conn_fd, &res);
 
       free_http_request(&req);
       free_http_response(&res);
       return 1;
     }
 
-    if (is_websocket_handshake(&req)) {
-        printf("Websocket handshake!\n");
-    }
-
     printf("%s %s\n", req.method, req.path);
+
+    if (is_websocket_handshake(&req)) {
+      HttpResponse res;
+      const char *sec_ws_key = find_header(&req, "sec-websocket-key");
+      build_ws_handshake_response(&res, sec_ws_key);
+
+      send_response(conn_fd, &res);
+
+      free_http_request(&req);
+      free_http_response(&res);
+      return 1;
+    }
 
     HttpResponse res;
     create_ok_response(&res);
 
-    char response_buf[4096];
-    int response_size =
-        build_http_response(&res, response_buf, sizeof(response_buf));
-
-    int bytes_written = write(conn_fd, response_buf, response_size);
-    if (bytes_written == -1) {
-      perror("write failed");
-    }
+    send_response(conn_fd, &res);
 
     free_http_request(&req);
     free_http_response(&res);
   } else if (bytes_read == 0) {
     printf("client disconnected\n");
   } else {
-    fprintf(stderr, "bind failed: %s\n", strerror(errno));
+    perror("bind failed");
   }
 
   usleep(1000);

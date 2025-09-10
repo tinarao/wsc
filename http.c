@@ -132,6 +132,11 @@ void free_http_response(HttpResponse *response) {
     free(response->body);
     response->body = NULL;
   }
+
+  if (response->ws_accept_hash) {
+    free(response->ws_accept_hash);
+    response->ws_accept_hash = NULL;
+  }
 }
 
 void create_ok_response(HttpResponse *response) {
@@ -142,11 +147,8 @@ void create_ok_response(HttpResponse *response) {
   add_header(response, "Content-Type", "text/plain");
   add_header(response, "Connection", "close");
 
-  const char *response_str = "Recieved\n";
-  response->body = strdup(response_str);
-  if (response->body) {
-    response->body_len = strlen(response->body);
-  }
+  response->body = "Recieved!\n";
+  response->body_len = 11;
 
   char content_length_header[20];
   snprintf(content_length_header, sizeof(content_length_header), "%zu",
