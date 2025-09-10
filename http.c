@@ -2,10 +2,11 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <strings.h>
 
-void skip_empty_lines(const char *ptr) {
-  while (*ptr == '\r' || *ptr == '\n') {
-    ptr++;
+void skip_empty_lines(const char **ptr) {
+  while (**ptr == '\r' || **ptr == '\n') {
+    (*ptr)++;
   }
 }
 
@@ -26,7 +27,7 @@ int parse_http_request(const char *raw_request, HttpRequest *request) {
 
   sscanf(line, "%7s %255s", request->method, request->path);
 
-  skip_empty_lines(rr_ptr);
+  skip_empty_lines(&rr_ptr);
 
   // headers
   request->headers_count = 0;
@@ -60,10 +61,10 @@ int parse_http_request(const char *raw_request, HttpRequest *request) {
 
     request->headers_count++;
 
-    skip_empty_lines(rr_ptr);
+    skip_empty_lines(&rr_ptr);
   }
 
-  skip_empty_lines(rr_ptr);
+  skip_empty_lines(&rr_ptr);
 
   if (*rr_ptr != '\0') {
     // body
@@ -119,55 +120,69 @@ int build_http_response(const HttpResponse *res, char *buf, size_t buf_size) {
 }
 
 void add_header(HttpResponse *res, const char *name, const char *value) {
-    if (res->headers_count < MAX_HEADERS) {
-        strncpy(res->headers[res->headers_count][0], name, MAX_HEADER_NAME_LEN);
-        strncpy(res->headers[res->headers_count][1], value, MAX_HEADER_VALUE_LEN);
-        res->headers_count++;
-    }
+  if (res->headers_count < MAX_HEADERS) {
+    strncpy(res->headers[res->headers_count][0], name, MAX_HEADER_NAME_LEN);
+    strncpy(res->headers[res->headers_count][1], value, MAX_HEADER_VALUE_LEN);
+    res->headers_count++;
+  }
 }
 
 void free_http_response(HttpResponse *response) {
-    if (response->body) {
-        free(response->body);
-        response->body = NULL;
-    }
+  if (response->body) {
+    free(response->body);
+    response->body = NULL;
+  }
 }
 
-void create_ok_response(HttpResponse* response) {
-    memset(response, 0, sizeof(HttpResponse));
-    response->status_code = 200;
-    response->status_text = "OK";
+void create_ok_response(HttpResponse *response) {
+  memset(response, 0, sizeof(HttpResponse));
+  response->status_code = 200;
+  response->status_text = "OK";
 
-    add_header(response, "Content-Type", "text/plain");
-    add_header(response, "Connection", "close");
+  add_header(response, "Content-Type", "text/plain");
+  add_header(response, "Connection", "close");
 
-    const char *response_str = "Recieved\n";
-    response->body = strdup(response_str);
-    if (response->body) {
-      response->body_len = strlen(response->body);
-    }
+  const char *response_str = "Recieved\n";
+  response->body = strdup(response_str);
+  if (response->body) {
+    response->body_len = strlen(response->body);
+  }
 
-    char content_length_header[20];
-    snprintf(content_length_header, sizeof(content_length_header), "%zu",
-             response->body_len);
-    add_header(response, "Content-Length", content_length_header);
+  char content_length_header[20];
+  snprintf(content_length_header, sizeof(content_length_header), "%zu",
+           response->body_len);
+  add_header(response, "Content-Length", content_length_header);
 }
 
-void create_err_response(HttpResponse *response, int status, char* status_str, const char* body) {
-    memset(response, 0, sizeof(HttpResponse)); 
-    response->status_code = status;  
-    response->status_text = status_str;
+void create_err_response(HttpResponse *response, int status, char *status_str,
+                         const char *body) {
+  memset(response, 0, sizeof(HttpResponse));
+  response->status_code = status;
+  response->status_text = status_str;
 
-    add_header(response, "Content-Type", "text/plain");
-    add_header(response, "Connection", "close");
+  add_header(response, "Content-Type", "text/plain");
+  add_header(response, "Connection", "close");
 
-    response->body = strdup(body);
-    if (response->body) {
-        response->body_len = strlen(response->body);
-    }
+  response->body = strdup(body);
+  if (response->body) {
+    response->body_len = strlen(response->body);
+  }
 
-    char content_length_header[20];
-    snprintf(content_length_header, sizeof(content_length_header), "%zu",
-             response->body_len);
-    add_header(response, "Content-Length", content_length_header);
+  char content_length_header[20];
+  snprintf(content_length_header, sizeof(content_length_header), "%zu",
+           response->body_len);
+  add_header(response, "Content-Length", content_length_header);
+}
+
+const char *find_header(HttpRequest *req, char *name) {
+  if (req->headers_count < 1)
+    return NULL;
+
+  for (size_t i = 0; i < req->headers_count; i++) {
+    if (strcasecmp(req->headers[i][0], name) == 0) {
+      return req->headers[i][1];
+    };
+  };
+
+  return NULL;
 }

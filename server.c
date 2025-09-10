@@ -1,4 +1,6 @@
 #include "server.h"
+#include "http.h"
+#include "websockets.h"
 
 int start_http_server(int port) {
   struct sockaddr_in server_sockaddr_in;
@@ -52,8 +54,8 @@ int handle_request(int conn_fd) {
     buf[bytes_read] = '\0';
 
     HttpRequest req;
-    if (parse_http_request(buf, &req) == -1) {
-
+    int parse_req_result = parse_http_request(buf, &req);
+    if (parse_req_result == -1) {
       HttpResponse res;
       create_err_response(&res, 500, "Internal Server Error",
                           "Failed to read request");
@@ -70,6 +72,10 @@ int handle_request(int conn_fd) {
       free_http_request(&req);
       free_http_response(&res);
       return 1;
+    }
+
+    if (is_websocket_handshake(&req)) {
+        printf("Websocket handshake!\n");
     }
 
     printf("%s %s\n", req.method, req.path);

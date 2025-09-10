@@ -22,6 +22,9 @@ typedef struct {
 int parse_http_request(const char* req, HttpRequest* out);
 void free_http_request(HttpRequest* req);
 
+// returns value of header or NULL, if not present
+const char* find_header(HttpRequest *req, char *name);
+
 // Responses
 
 typedef struct {
