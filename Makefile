@@ -3,3 +3,7 @@ build:
 
 run: build
 	./bin/main
+
+run.debug: build
+	valgrind --tool=memcheck --leak-check=full ./bin/main
+

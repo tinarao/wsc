@@ -201,9 +201,13 @@ int is_websocket_handshake(HttpRequest *req) {
   const char *ws_version = find_header(req, "sec-websocket-version");
   const char *ws_key = find_header(req, "sec-websocket-key");
 
+  // printf("conn upgrade: %s\n", strcasestr(connection, "upgrade"));
+  // printf("version_found: %d\n", strcasecmp(ws_version, "13"));
+  // printf("exact version: %d\n", atoi(ws_version));
+
   return (upgrade && strcasecmp(upgrade, "websocket") == 0 && connection &&
           strcasestr(connection, "upgrade") != NULL && ws_key && ws_version &&
-          strcasecmp(ws_version, "13"));
+          atoi(ws_version) == 13);
 }
 
 int make_ws_accept_hash(HttpResponse *res, const char *sec_ws_key) {

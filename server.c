@@ -1,5 +1,6 @@
 #include "server.h"
 #include "http.h"
+#include "websockets.h"
 #include <stdio.h>
 
 int start_http_server(int port) {
@@ -83,14 +84,17 @@ int handle_request(int conn_fd) {
     printf("%s %s\n", req.method, req.path);
 
     if (is_websocket_handshake(&req)) {
+      printf("ws handshake\n");
       HttpResponse res;
       const char *sec_ws_key = find_header(&req, "sec-websocket-key");
       build_ws_handshake_response(&res, sec_ws_key);
-
       send_response(conn_fd, &res);
 
       free_http_request(&req);
       free_http_response(&res);
+
+      handle_ws_connection(conn_fd);
+
       return 1;
     }
 
@@ -99,8 +103,8 @@ int handle_request(int conn_fd) {
 
     send_response(conn_fd, &res);
 
-    free_http_request(&req);
     free_http_response(&res);
+    free_http_request(&req);
   } else if (bytes_read == 0) {
     printf("client disconnected\n");
   } else {
